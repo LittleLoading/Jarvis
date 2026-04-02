@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jarvis AI</title>
+    <script type="module" src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.esm.js"></script>
+    <script nomodule src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+    <style>
+
+        /* --- VYLEPŠENÝ KALENDÁŘ (SCHEDULE) --- */
+        .schedule-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 15px;
+            margin-bottom: 8px;
+            background: rgba(255, 255, 255, 0.03); /* Jemný průhledný podklad */
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none; /* Pro případ, že by to byl <a> tag */
+        }
+
+        .schedule-item:hover {
+            background: rgba(255, 255, 255, 0.08);
+            transform: translateX(5px); /* Hezký efekt posunutí doprava při najetí */
+            border-left: 2px solid var(--accent-purple); /* Barevný akcent */
+        }
+
+        .schedule-left {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            white-space: nowrap; /* Zabrání zalomení času na dva řádky */
+        }
+
+        .schedule-time {
+            font-weight: 600;
+            font-size: 0.9rem;
+            color: var(--text-primary);
+        }
+
+        .schedule-title {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            text-align: right;
+            margin-left: 15px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis; /* Zkrátí dlouhý text třemi tečkami */
+            max-width: 140px; /* Ochrana proti přetečení */
+        }
+        /* --- CSS PROMĚNNÉ A ZÁKLAD --- */
+        :root {
+            --bg-main: #0f172a;
+            --bg-secondary: #1e293b;
+            --bg-glass: rgba(30, 41, 59, 0.7);
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --accent-purple: #8b5cf6;
+            --accent-cyan: #06b6d4;
+            --accent-green: #10b981;
+            --border-radius: 20px;
+        }
+
+        body { font-family: 'Inter', sans-serif; margin: 0; background-color: var(--bg-main); color: var(--text-primary); height: 100vh; overflow: hidden; }
+
+        /* --- HLAVNÍ GRID LAYOUT --- */
+        .dashboard-container { display: grid; grid-template-columns: 260px 1fr 320px; grid-template-rows: 1fr; gap: 20px; height: 100vh; padding: 20px; box-sizing: border-box; }
+
+        /* --- GLASSMORPHISM --- */
+        .glass-card { background: var(--bg-glass); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: var(--border-radius); box-shadow: 0 4px 30px rgba(0, 0, 0, 0.2); overflow: hidden; }
+
+        /* --- LEVÝ SIDEBAR --- */
+        .sidebar-left { display: flex; flex-direction: column; padding: 20px; }
+        .new-chat-btn { background: linear-gradient(135deg, var(--accent-purple), var(--accent-cyan)); border: none; padding: 15px; border-radius: var(--border-radius); color: white; font-weight: bold; font-size: 1rem; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 30px; box-shadow: 0 4px 15px rgba(139, 92, 246, 0.4); transition: transform 0.2s; }
+        .new-chat-btn:hover { transform: translateY(-2px); }
+        .nav-list { list-style: none; padding: 0; margin: 0; flex: 1; overflow-y: auto; }
+
+        /* Úprava nav-item pro tlačítka na smazání/přejmenování */
+        .nav-item { position: relative; display: flex; align-items: center; justify-content: space-between; padding: 12px 15px; margin-bottom: 5px; border-radius: 15px; cursor: pointer; color: var(--text-secondary); transition: 0.3s; }
+        .nav-item:hover, .nav-item.active { background: rgba(255,255,255,0.1); color: var(--text-primary); }
+        .nav-item-content { display: flex; align-items: center; gap: 15px; overflow: hidden; flex: 1; }
+        .nav-item-content span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .nav-item ion-icon { font-size: 1.4rem; flex-shrink: 0;}
+
+        .chat-actions { display: flex; gap: 5px; opacity: 0; transition: 0.2s; }
+        .nav-item:hover .chat-actions { opacity: 1; }
+        .action-icon { font-size: 1.1rem; padding: 4px; border-radius: 5px; transition: 0.2s; }
+        .action-icon:hover { background: rgba(255,255,255,0.2); color: white; }
+        .action-icon.delete:hover { color: #f43f5e; }
+
+        .user-profile { display: flex; align-items: center; gap: 15px; padding-top: 20px; border-top: 1px solid rgba(255,255,255,0.1); }
+        .avatar { width: 45px; height: 45px; background: var(--accent-cyan); border-radius: 50%; }
+        .user-info h4 { margin: 0; font-size: 1rem; }
+        .user-info p { margin: 0; color: var(--text-secondary); font-size: 0.8rem; }
+
+        /* --- CENTRÁLNÍ OBLAST --- */
+        .center-area { display: flex; flex-direction: column; position: relative; }
+        .hero-section { padding: 40px; text-align: center; }
+        .hero-icon { font-size: 4rem; color: var(--accent-purple); margin-bottom: 20px; }
+        .hero-title { font-size: 2.5rem; margin: 0; font-weight: 300; }
+        .hero-subtitle { color: var(--text-secondary); }
+        .suggestions-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; padding: 0 40px; margin-top: 30px; }
+        .suggestion-card { padding: 20px; cursor: pointer; display: flex; align-items: center; gap: 15px; transition: 0.3s; }
+        .suggestion-card:hover { background: rgba(255,255,255,0.1); border-color: var(--accent-purple); }
+        .sug-icon { font-size: 2rem; color: var(--accent-cyan); }
+
+        #chat-history { flex: 1; overflow-y: auto; padding: 20px 40px; display: flex; flex-direction: column; gap: 20px; scrollbar-width: none; }
+        #chat-history::-webkit-scrollbar { display: none; }
+
+        .message { max-width: 80%; padding: 15px 25px; border-radius: var(--border-radius); line-height: 1.5; position: relative; animation: fadeIn 0.3s ease-in; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* Styl pro Markdown */
+        .message p { margin: 0 0 10px 0; }
+        .message p:last-child { margin-bottom: 0; }
+        .message ul, .message ol { margin: 0; padding-left: 20px; }
+        .message pre { background: rgba(0,0,0,0.2); padding: 10px; border-radius: 10px; overflow-x: auto; }
+        .message code { font-family: monospace; background: rgba(0,0,0,0.2); padding: 2px 5px; border-radius: 5px; }
+
+        .user-message { align-self: flex-end; background: linear-gradient(135deg, var(--accent-purple), var(--bg-secondary)); border-bottom-right-radius: 5px; }
+        .bot-message { align-self: flex-start; background: var(--bg-secondary); border: 1px solid rgba(255, 255, 255, 0.05); border-bottom-left-radius: 5px; }
+
+        .input-area-container { padding: 20px 40px; }
+        .input-glass-wrapper { display: flex; background: var(--bg-glass); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 30px; padding: 5px; box-shadow: 0 -4px 30px rgba(0, 0, 0, 0.2); }
+        #user-input { flex: 1; background: transparent; border: none; color: var(--text-primary); padding: 15px 25px; font-size: 1rem; outline: none; }
+        #user-input::placeholder { color: var(--text-secondary); }
+        #send-btn { background: var(--accent-cyan); border: none; width: 50px; height: 50px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--bg-main); font-size: 1.5rem; margin-left: 10px; transition: 0.3s; }
+        #send-btn:hover { background: var(--accent-purple); color: white; }
+        #send-btn:disabled { background: var(--text-secondary); cursor: not-allowed; }
+
+        /* --- PRAVÝ SIDEBAR --- */
+        .sidebar-right { display: flex; flex-direction: column; gap: 20px; overflow-y: auto; scrollbar-width: none; }
+        .sidebar-right::-webkit-scrollbar { display: none; }
+
+        .widget-card { padding: 20px; }
+        .widget-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
+        .widget-header h3 { margin: 0; font-size: 1.1rem; font-weight: 500; }
+
+        .weather-widget { background: linear-gradient(135deg, #1e3a8a, #06b6d4); }
+        .weather-temp { font-size: 2.5rem; font-weight: bold; margin: 10px 0; }
+        .weather-loc { display: flex; align-items: center; gap: 5px; }
+
+        .status-item { margin-bottom: 15px; }
+        .status-label { display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 0.9rem; }
+        .progress-bar-bg { height: 8px; background: rgba(255,255,255,0.1); border-radius: 10px; overflow: hidden; }
+        .progress-bar-fill { height: 100%; background: var(--accent-green); border-radius: 10px; width: 0%; transition: width 1s ease-in-out; }
+
+        /* --- CUSTOM MODAL STYLY --- */
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.6); backdrop-filter: blur(5px); display: none; align-items: center; justify-content: center; z-index: 1000; opacity: 0; transition: opacity 0.3s ease; }
+        .modal-overlay.active { display: flex; opacity: 1; }
+        .modal-content { width: 100%; max-width: 350px; padding: 25px; display: flex; flex-direction: column; gap: 20px; transform: translateY(20px); transition: transform 0.3s ease; }
+        .modal-overlay.active .modal-content { transform: translateY(0); }
+        .modal-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px; }
+        .modal-header h3 { margin: 0; font-weight: 500; font-size: 1.2rem; }
+        .modal-header ion-icon { font-size: 1.5rem; cursor: pointer; color: var(--text-secondary); transition: 0.3s; }
+        .modal-header ion-icon:hover { color: var(--accent-purple); }
+        .modal-footer { display: flex; justify-content: flex-end; gap: 10px; }
+        .primary-btn { background: linear-gradient(135deg, var(--accent-purple), var(--accent-cyan)); border: none; padding: 10px 20px; border-radius: 10px; color: white; cursor: pointer; font-weight: bold; transition: 0.3s; }
+        .primary-btn:hover { transform: translateY(-2px); box-shadow: 0 4px 15px rgba(139, 92, 246, 0.4); }
+        .secondary-btn { background: rgba(255,255,255,0.1); border: none; padding: 10px 20px; border-radius: 10px; color: white; cursor: pointer; transition: 0.3s; }
+        .secondary-btn:hover { background: rgba(255,255,255,0.2); }
+
+        /* --- STYL PRO SELECT MENU --- */
+        .glass-select { background: rgba(0, 0, 0, 0.2); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.1); color: var(--text-primary); padding: 10px; border-radius: 10px; width: 100%; outline: none; cursor: pointer; font-family: 'Inter', sans-serif; appearance: none; }
+        .glass-select option { background: var(--bg-secondary); color: var(--text-primary); }
+    </style>
+</head>
+<body>
+
+<div class="dashboard-container">
+    <aside class="sidebar-left glass-card">
+        <button class="new-chat-btn" onclick="createNewChat()">
+            <ion-icon name="add-circle"></ion-icon> New Chat
+        </button>
+
+        <ul class="nav-list" id="chat-list-container">
+            <li class="nav-item">Načítám historii...</li>
+        </ul>
+        <div class="user-profile">
+            <div class="avatar"></div>
+           <div class="user-info">
+            <h4 id="sidebar-username" style="cursor: pointer;" onclick="changeUserName()" title="Změnit jméno">Jane Doe</h4>
+            <p>Premium Member</p>
+        </div>
+        <ion-icon name="settings-outline" style="margin-left: auto; cursor: pointer;" onclick="changeUserName()"></ion-icon>
+        </div>
+    </aside>
+
+    <main class="center-area glass-card">
+        <div id="hero-section" class="hero-section">
+            <div class="hero-icon"><ion-icon name="cube-outline"></ion-icon></div>
+            <h1 class="hero-title" id="hero-greeting">Welcome back, Jane</h1>
+            <p class="hero-subtitle">Jarvis AI</p>
+            <div class="suggestions-grid">
+                <div class="suggestion-card glass-card" onclick="useSuggestion('Co je nového ve světě AI?')">
+                    <ion-icon name="newspaper-outline" class="sug-icon"></ion-icon>
+                    <div>
+                        <h3>AI News</h3>
+                        <p style="margin:0; font-size: 0.8rem; color: var(--text-secondary)">Latest updates</p>
+                    </div>
+                </div>
+                <div class="suggestion-card glass-card" onclick="useSuggestion('Jaké je počasí v Praze?')">
+                    <ion-icon name="cloudy-night-outline" class="sug-icon"></ion-icon>
+                    <div>
+                        <h3>Weather</h3>
+                        <p style="margin:0; font-size: 0.8rem; color: var(--text-secondary)">Check forecast</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div id="chat-history"></div>
+        <div class="input-area-container">
+            <div class="input-glass-wrapper">
+                <input type="text" id="user-input" placeholder="Ask anything..." autocomplete="off">
+                <button id="send-btn">
+                    <ion-icon name="send"></ion-icon>
+                </button>
+            </div>
+        </div>
+    </main>
+
+   <aside class="sidebar-right">
+        <div class="widget-card glass-card">
+            <div class="widget-header">
+                <h3>AI Model</h3>
+                <ion-icon name="hardware-chip-outline" style="color: var(--accent-cyan);"></ion-icon>
+            </div>
+            <select id="model-select" class="glass-select">
+                <optgroup label="Gemini 3 & 3.1 (Previews)">
+                    <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro Preview</option>
+                    <option value="gemini-3.1-pro-preview-customtools">Gemini 3.1 Pro (Custom Tools)</option>
+                    <option value="gemini-3-pro-preview">Gemini 3 Pro Preview</option>
+                    <option value="gemini-3-flash-preview">Gemini 3 Flash Preview</option>
+                </optgroup>
+                <optgroup label="Gemini 2.5">
+                    <option value="gemini-2.5-pro" selected>Gemini 2.5 Pro</option>
+                    <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+                    <option value="gemini-2.5-flash-lite">Gemini 2.5 Flash-Lite</option>
+                </optgroup>
+                <optgroup label="Gemini 2.0">
+                    <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
+                    <option value="gemini-2.0-flash-lite">Gemini 2.0 Flash-Lite</option>
+                </optgroup>
+            </select>
+        </div>
+
+        <div class="widget-card glass-card weather-widget">
+            <div class="widget-header">
+                <h3>Weather</h3>
+                <ion-icon name="cloud-outline" id="weather-icon"></ion-icon>
+            </div>
+            <div class="weather-temp" id="weather-temp">--°C</div>
+            <div class="weather-loc">
+                <ion-icon name="location"></ion-icon>
+                <span id="weather-city">Loading...</span>
+            </div>
+        </div>
+
+        <div class="widget-card glass-card">
+            <div class="widget-header">
+                <h3>Schedule</h3>
+                <ion-icon name="calendar-number-outline"></ion-icon>
+            </div>
+            <ul class="nav-list" style="margin-top: 10px;" id="schedule-list">
+                <li class="nav-item">Načítám rozvrh...</li>
+            </ul>
+        </div>
+
+        <div class="widget-card glass-card">
+             <div class="widget-header">
+                <h3>System Status</h3>
+                <ion-icon name="hardware-chip-outline"></ion-icon>
+            </div>
+            <div class="status-item">
+                <div class="status-label">
+                    <span>Last Request Tokens</span>
+                    <span id="token-count-text">0</span>
+                </div>
+                <div class="progress-bar-bg">
+                    <div id="token-bar" class="progress-bar-fill" style="width: 0%;"></div>
+                </div>
+            </div>
+            <div class="status-item">
+                <div class="status-label">
+                    <span>Response Latency</span>
+                    <span id="latency-text">0 ms</span>
+                </div>
+                <div class="progress-bar-bg">
+                    <div id="latency-bar" class="progress-bar-fill" style="width: 0%; background-color: var(--accent-purple);"></div>
+                </div>
+            </div>
+        </div>
+    </aside>
+</div>
+
+<div id="settings-modal" class="modal-overlay">
+    <div class="modal-content glass-card">
+        <div class="modal-header">
+            <h3>User Settings</h3>
+            <ion-icon name="close-outline" id="close-modal-btn"></ion-icon>
+        </div>
+        <div class="modal-body">
+            <label for="new-name-input" style="color: var(--text-secondary); font-size: 0.9rem;">Display Name:</label>
+            <div class="input-glass-wrapper" style="margin-top: 10px; padding: 0;">
+                <input type="text" id="new-name-input" placeholder="Enter your name..." autocomplete="off" style="width: 100%;">
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button id="cancel-name-btn" class="secondary-btn">Cancel</button>
+            <button id="save-name-btn" class="primary-btn">Save</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    // 1. GLOBÁLNÍ PROMĚNNÉ
+    const chatHistory = document.getElementById('chat-history');
+    const userInput = document.getElementById('user-input');
+    const sendBtn = document.getElementById('send-btn');
+    const heroSection = document.getElementById('hero-section');
+    let currentChatId = null;
+
+    // 2. LOGIKA PRO UŽIVATELSKÉ JMÉNO A MODAL
+    const settingsModal = document.getElementById('settings-modal');
+    const newNameInput = document.getElementById('new-name-input');
+
+    function loadUserName() {
+        const savedName = localStorage.getItem('jarvis_username') || 'Jane Doe';
+        document.getElementById('sidebar-username').innerText = savedName;
+        const firstName = savedName.split(' ')[0];
+        document.getElementById('hero-greeting').innerText = `Welcome back, ${firstName}`;
+    }
+
+    function changeUserName() {
+        const currentName = localStorage.getItem('jarvis_username') || 'Jane Doe';
+        newNameInput.value = currentName;
+        settingsModal.classList.add('active');
+        setTimeout(() => newNameInput.focus(), 100);
+    }
+
+    function closeModal() { settingsModal.classList.remove('active'); }
+
+    function saveUserName() {
+        const newName = newNameInput.value.trim();
+        if (newName) {
+            localStorage.setItem('jarvis_username', newName);
+            loadUserName();
+            closeModal();
+        }
+    }
+
+    document.getElementById('close-modal-btn').addEventListener('click', closeModal);
+    document.getElementById('cancel-name-btn').addEventListener('click', closeModal);
+    document.getElementById('save-name-btn').addEventListener('click', saveUserName);
+    settingsModal.addEventListener('click', (e) => { if (e.target === settingsModal) closeModal(); });
+    newNameInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') saveUserName(); });
+
+    // 3. SPRÁVA CHATŮ (HISTORIE, MAZÁNÍ, PŘEJMENOVÁNÍ)
+    async function loadChatList() {
+        const response = await fetch('/api/chats');
+        const chats = await response.json();
+        const container = document.getElementById('chat-list-container');
+        container.innerHTML = '';
+
+        chats.forEach(chat => {
+            const li = document.createElement('li');
+            li.classList.add('nav-item');
+            if (chat.id === currentChatId) li.classList.add('active');
+
+            li.onclick = () => loadChat(chat.id); // Kliknutí na celý řádek načte chat
+
+            // Vnitřek chatu - název + akční ikonky
+            li.innerHTML = `
+                <div class="nav-item-content">
+                    <ion-icon name="chatbubble-ellipses-outline"></ion-icon>
+                    <span>${chat.title}</span>
+                </div>
+                <div class="chat-actions">
+                    <ion-icon name="pencil-outline" class="action-icon" title="Přejmenovat" onclick="renameChat('${chat.id}', '${chat.title}', event)"></ion-icon>
+                    <ion-icon name="trash-outline" class="action-icon delete" title="Smazat" onclick="deleteChat('${chat.id}', event)"></ion-icon>
+                </div>
+            `;
+            container.appendChild(li);
+        });
+    }
+
+    // Nofá funkce: Smazat chat
+    async function deleteChat(chatId, event) {
+        event.stopPropagation(); // Zabrání tomu, aby se chat zároveň načetl
+        if (confirm("Opravdu chceš smazat tento chat?")) {
+            await fetch(`/api/chats/${chatId}`, { method: 'DELETE' });
+
+            // Pokud jsme smazali chat, ve kterém zrovna jsme, vyčistíme obrazovku
+            if (currentChatId === chatId) {
+                currentChatId = null;
+                document.getElementById('chat-history').innerHTML = '';
+                document.getElementById('hero-section').style.display = 'block';
+            }
+            loadChatList(); // Obnoví seznam
+        }
+    }
+
+    // Nová funkce: Přejmenovat chat
+    async function renameChat(chatId, currentTitle, event) {
+        event.stopPropagation(); // Zabrání načtení chatu
+        const newTitle = prompt("Zadej nový název chatu:", currentTitle);
+
+        if (newTitle && newTitle.trim() !== "" && newTitle !== currentTitle) {
+            await fetch(`/api/chats/${chatId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ title: newTitle.trim() })
+            });
+            loadChatList(); // Obnoví seznam s novým jménem
+        }
+    }
+
+    async function createNewChat() {
+        const response = await fetch('/api/chats', { method: 'POST' });
+        const newChat = await response.json();
+
+        currentChatId = newChat.id;
+        document.getElementById('chat-history').innerHTML = '';
+        document.getElementById('hero-section').style.display = 'block';
+
+        loadChatList();
+    }
+
+    async function loadChat(chatId) {
+        currentChatId = chatId;
+        const response = await fetch(`/api/chats/${chatId}`);
+        const chatData = await response.json();
+
+        const historyDiv = document.getElementById('chat-history');
+        historyDiv.innerHTML = '';
+
+        if (chatData.messages.length > 0) {
+            document.getElementById('hero-section').style.display = 'none';
+        } else {
+            document.getElementById('hero-section').style.display = 'block';
+        }
+
+        chatData.messages.forEach(msg => {
+            const div = document.createElement('div');
+            div.classList.add('message', msg.role === 'user' ? 'user-message' : 'bot-message');
+            if (msg.role === 'bot') {
+                div.innerHTML = marked.parse(msg.text);
+            } else {
+                div.style.whiteSpace = 'pre-wrap';
+                div.innerText = msg.text;
+            }
+            historyDiv.appendChild(div);
+        });
+
+        historyDiv.scrollTop = historyDiv.scrollHeight;
+        loadChatList();
+    }
+
+    // 4. ODESÍLÁNÍ ZPRÁV A CHAT UI
+    function useSuggestion(text) {
+        userInput.value = text;
+        sendMessage();
+    }
+
+    async function sendMessage() {
+        const text = userInput.value.trim();
+        if (!text || !currentChatId) return;
+
+        document.getElementById('hero-section').style.display = 'none';
+
+        const div = document.createElement('div');
+        div.classList.add('message', 'user-message');
+        div.style.whiteSpace = 'pre-wrap';
+        div.innerText = text;
+        chatHistory.appendChild(div);
+        chatHistory.scrollTop = chatHistory.scrollHeight;
+
+        userInput.value = '';
+        sendBtn.disabled = true;
+        sendBtn.innerHTML = '<ion-icon name="hourglass-outline"></ion-icon>';
+
+        document.getElementById('latency-text').innerText = "Analyzing...";
+        document.getElementById('token-bar').style.width = "10%";
+
+        const selectedModel = document.getElementById('model-select').value;
+
+        try {
+            const response = await fetch('/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message: text, chat_id: currentChatId, model: selectedModel })
+            });
+
+            const data = await response.json();
+
+            if (data.reply) {
+                const botDiv = document.createElement('div');
+                botDiv.classList.add('message', 'bot-message');
+                botDiv.innerHTML = marked.parse(data.reply);
+                chatHistory.appendChild(botDiv);
+                chatHistory.scrollTop = chatHistory.scrollHeight;
+
+                if (data.new_title) loadChatList();
+
+                const tokens = data.tokens || 0;
+                document.getElementById('token-count-text').innerText = tokens;
+                document.getElementById('token-bar').style.width = Math.min((tokens / 2000) * 100, 100) + "%";
+
+                const latency = data.latency || 0;
+                const latencyBar = document.getElementById('latency-bar');
+                document.getElementById('latency-text').innerText = latency + " ms";
+                latencyBar.style.width = Math.min((latency / 3000) * 100, 100) + "%";
+
+                if (latency < 1000) latencyBar.style.backgroundColor = "var(--accent-green)";
+                else if (latency < 2500) latencyBar.style.backgroundColor = "#f59e0b";
+                else latencyBar.style.backgroundColor = "#f43f5e";
+            } else if (data.error) {
+                throw new Error(data.error);
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            const errorDiv = document.createElement('div');
+            errorDiv.classList.add('message', 'bot-message');
+            errorDiv.innerText = "Chyba připojení k serveru: " + error.message;
+            chatHistory.appendChild(errorDiv);
+        } finally {
+            sendBtn.disabled = false;
+            sendBtn.innerHTML = '<ion-icon name="send"></ion-icon>';
+            userInput.focus();
+        }
+    }
+
+    sendBtn.addEventListener('click', sendMessage);
+    userInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') sendMessage(); });
+
+    // 5. WIDGETY A INICIALIZACE PO NAČTENÍ STRÁNKY
+    async function updateDashboard() {
+        try {
+            const response = await fetch('/api/dashboard');
+            const data = await response.json();
+
+            if (data.weather) {
+                document.getElementById('weather-temp').innerText = data.weather.temp;
+                document.getElementById('weather-city').innerText = data.weather.location;
+                document.getElementById('weather-icon').setAttribute('name', data.weather.icon);
+            }
+
+           if (data.schedule) {
+                const scheduleList = document.getElementById('schedule-list');
+                scheduleList.innerHTML = '';
+                data.schedule.forEach(event => {
+                    const li = document.createElement('li');
+
+                    // ZMĚNA ZDE: Místo nav-item používáme náš nový schedule-item
+                    li.className = 'schedule-item';
+
+                    if (event.link && event.link !== '#') {
+                        li.onclick = () => window.open(event.link, '_blank');
+                        li.title = "Otevřít v Google Kalendáři: " + event.title;
+                    }
+
+                    // ZMĚNA ZDE: Rozdělili jsme to na levou a pravou stranu pomocí Flexboxu
+                    li.innerHTML = `
+                        <div class="schedule-left">
+                            <ion-icon name="radio-button-on" style="color: ${event.color}; font-size: 0.9rem;"></ion-icon>
+                            <span class="schedule-time">${event.time}</span>
+                        </div>
+                        <span class="schedule-title">${event.title}</span>
+                    `;
+                    scheduleList.appendChild(li);
+                });
+            }
+        } catch (error) { console.error("Chyba při načítání dashboard dat:", error); }
+    }
+
+    document.addEventListener('DOMContentLoaded', async () => {
+        loadUserName();
+        updateDashboard();
+        setInterval(updateDashboard, 600000);
+
+        const savedModel = localStorage.getItem('jarvis_model') || 'gemini-2.5-pro';
+        document.getElementById('model-select').value = savedModel;
+
+        document.getElementById('model-select').addEventListener('change', (e) => {
+            localStorage.setItem('jarvis_model', e.target.value);
+        });
+
+        try {
+            const response = await fetch('/api/chats');
+            const chats = await response.json();
+            if (chats.length > 0) {
+                loadChat(chats[0].id);
+            } else {
+                createNewChat();
+            }
+        } catch (error) {
+            console.error("Chyba načítání historie chatů:", error);
+        }
+    });
+</script>
+
+</body>
+</html>
